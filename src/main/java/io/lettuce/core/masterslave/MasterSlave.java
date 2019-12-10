@@ -15,11 +15,6 @@
  */
 package io.lettuce.core.masterslave;
 
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
-
 import io.lettuce.core.ConnectionFuture;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisConnectionException;
@@ -30,6 +25,11 @@ import io.lettuce.core.internal.LettuceAssert;
 import io.lettuce.core.internal.LettuceLists;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Master-Slave connection API.
@@ -94,7 +94,6 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
  */
 @Deprecated
 public class MasterSlave {
-
     /**
      * Open a new connection to a Redis Master-Slave server/servers using the supplied {@link RedisURI} and the supplied
      * {@link RedisCodec codec} to encode/decode keys.
@@ -111,13 +110,39 @@ public class MasterSlave {
      * @return a new connection.
      */
     public static <K, V> StatefulRedisMasterSlaveConnection<K, V> connect(RedisClient redisClient, RedisCodec<K, V> codec,
-            RedisURI redisURI) {
+                                                                          RedisURI redisURI) {
 
         LettuceAssert.notNull(redisClient, "RedisClient must not be null");
         LettuceAssert.notNull(codec, "RedisCodec must not be null");
         LettuceAssert.notNull(redisURI, "RedisURI must not be null");
 
         return getConnection(connectAsyncSentinelOrAutodiscovery(redisClient, codec, redisURI), redisURI);
+    }
+
+    /**
+     * Open a new connection to a Redis Master-Slave server/servers using the supplied {@link RedisURI} and the supplied
+     * {@link RedisCodec codec} to encode/decode keys.
+     * <p>
+     * This {@link MasterSlave} performs auto-discovery of nodes using either Redis Sentinel or Master/Slave. A {@link RedisURI}
+     * can point to either a master or a replica host.
+     * </p>
+     *
+     * @param redisClient the Redis client.
+     * @param codec Use this codec to encode/decode keys and values, must not be {@literal null}.
+     * @param redisURI the Redis server to connect to, must not be {@literal null}.
+     * @param defaultNode add default node{@literal null}.
+     * @param <K> Key type.
+     * @param <V> Value type.
+     * @return a new connection.
+     */
+    public static <K, V> StatefulRedisMasterSlaveConnection<K, V> connect(RedisClient redisClient, RedisCodec<K, V> codec,
+                                                                          RedisURI redisURI, String defaultNode) {
+
+        LettuceAssert.notNull(redisClient, "RedisClient must not be null");
+        LettuceAssert.notNull(codec, "RedisCodec must not be null");
+        LettuceAssert.notNull(redisURI, "RedisURI must not be null");
+
+        return getConnection(connectAsyncSentinelOrAutodiscovery(redisClient, codec, redisURI,defaultNode), redisURI);
     }
 
     /**
@@ -137,10 +162,9 @@ public class MasterSlave {
      * @since
      */
     public static <K, V> CompletableFuture<StatefulRedisMasterSlaveConnection<K, V>> connectAsync(RedisClient redisClient,
-            RedisCodec<K, V> codec, RedisURI redisURI) {
+                                                                                                  RedisCodec<K, V> codec, RedisURI redisURI) {
         return transformAsyncConnectionException(connectAsyncSentinelOrAutodiscovery(redisClient, codec, redisURI), redisURI);
     }
-
     private static <K, V> CompletableFuture<StatefulRedisMasterSlaveConnection<K, V>> connectAsyncSentinelOrAutodiscovery(
             RedisClient redisClient, RedisCodec<K, V> codec, RedisURI redisURI) {
 
@@ -150,6 +174,18 @@ public class MasterSlave {
 
         if (isSentinel(redisURI)) {
             return new SentinelConnector<>(redisClient, codec, redisURI).connectAsync();
+        }
+        return new AutodiscoveryConnector<>(redisClient, codec, redisURI).connectAsync();
+    }
+    private static <K, V> CompletableFuture<StatefulRedisMasterSlaveConnection<K, V>> connectAsyncSentinelOrAutodiscovery(
+            RedisClient redisClient, RedisCodec<K, V> codec, RedisURI redisURI, String defaultNodes) {
+
+        LettuceAssert.notNull(redisClient, "RedisClient must not be null");
+        LettuceAssert.notNull(codec, "RedisCodec must not be null");
+        LettuceAssert.notNull(redisURI, "RedisURI must not be null");
+
+        if (isSentinel(redisURI)) {
+            return new SentinelConnector<>(redisClient, codec, redisURI,defaultNodes).connectAsync();
         }
 
         return new AutodiscoveryConnector<>(redisClient, codec, redisURI).connectAsync();
@@ -177,7 +213,7 @@ public class MasterSlave {
      * @return a new connection.
      */
     public static <K, V> StatefulRedisMasterSlaveConnection<K, V> connect(RedisClient redisClient, RedisCodec<K, V> codec,
-            Iterable<RedisURI> redisURIs) {
+                                                                          Iterable<RedisURI> redisURIs) {
         return getConnection(connectAsyncSentinelOrStaticSetup(redisClient, codec, redisURIs), redisURIs);
     }
 
@@ -203,7 +239,7 @@ public class MasterSlave {
      * @return {@link CompletableFuture} that is notified once the connect is finished.
      */
     public static <K, V> CompletableFuture<StatefulRedisMasterSlaveConnection<K, V>> connectAsync(RedisClient redisClient,
-            RedisCodec<K, V> codec, Iterable<RedisURI> redisURIs) {
+                                                                                                  RedisCodec<K, V> codec, Iterable<RedisURI> redisURIs) {
         return transformAsyncConnectionException(connectAsyncSentinelOrStaticSetup(redisClient, codec, redisURIs), redisURIs);
     }
 

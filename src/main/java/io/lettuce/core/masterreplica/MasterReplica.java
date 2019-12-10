@@ -15,12 +15,12 @@
  */
 package io.lettuce.core.masterreplica;
 
-import java.util.concurrent.CompletableFuture;
-
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.codec.RedisCodec;
 import io.lettuce.core.masterslave.MasterSlave;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Master-Replica connection API.
@@ -101,9 +101,31 @@ public class MasterReplica {
      * @return a new connection.
      */
     public static <K, V> StatefulRedisMasterReplicaConnection<K, V> connect(RedisClient redisClient, RedisCodec<K, V> codec,
-            RedisURI redisURI) {
+                                                                            RedisURI redisURI) {
 
         return new MasterReplicaConnectionWrapper<>(MasterSlave.connect(redisClient, codec, redisURI));
+    }
+
+    /**
+     * Open a new connection to a Redis Master-Replica server/servers using the supplied {@link RedisURI} and the supplied
+     * {@link RedisCodec codec} to encode/decode keys.
+     * <p>
+     * This {@link MasterReplica} performs auto-discovery of nodes using either Redis Sentinel or Master/Replica. A
+     * {@link RedisURI} can point to either a master or a replica host.
+     * </p>
+     *
+     * @param redisClient the Redis client.
+     * @param codec Use this codec to encode/decode keys and values, must not be {@literal null}.
+     * @param redisURI the Redis server to connect to, must not be {@literal null}.
+     * @param defaultNodes add default node{@literal null}.
+     * @param <K> Key type.
+     * @param <V> Value type.
+     * @return a new connection.
+     */
+    public static <K, V> StatefulRedisMasterReplicaConnection<K, V> connect(RedisClient redisClient, RedisCodec<K, V> codec,
+                                                                            RedisURI redisURI, String defaultNodes) {
+
+        return new MasterReplicaConnectionWrapper<>(MasterSlave.connect(redisClient, codec, redisURI,defaultNodes));
     }
 
     /**
@@ -123,7 +145,7 @@ public class MasterReplica {
      * @since
      */
     public static <K, V> CompletableFuture<StatefulRedisMasterReplicaConnection<K, V>> connectAsync(RedisClient redisClient,
-            RedisCodec<K, V> codec, RedisURI redisURI) {
+                                                                                                    RedisCodec<K, V> codec, RedisURI redisURI) {
         return MasterSlave.connectAsync(redisClient, codec, redisURI).thenApply(MasterReplicaConnectionWrapper::new);
     }
 
@@ -149,7 +171,7 @@ public class MasterReplica {
      * @return a new connection.
      */
     public static <K, V> StatefulRedisMasterReplicaConnection<K, V> connect(RedisClient redisClient, RedisCodec<K, V> codec,
-            Iterable<RedisURI> redisURIs) {
+                                                                            Iterable<RedisURI> redisURIs) {
         return new MasterReplicaConnectionWrapper<>(MasterSlave.connect(redisClient, codec, redisURIs));
     }
 
@@ -175,7 +197,7 @@ public class MasterReplica {
      * @return {@link CompletableFuture} that is notified once the connect is finished.
      */
     public static <K, V> CompletableFuture<StatefulRedisMasterReplicaConnection<K, V>> connectAsync(RedisClient redisClient,
-            RedisCodec<K, V> codec, Iterable<RedisURI> redisURIs) {
+                                                                                                    RedisCodec<K, V> codec, Iterable<RedisURI> redisURIs) {
 
         return MasterSlave.connectAsync(redisClient, codec, redisURIs).thenApply(MasterReplicaConnectionWrapper::new);
     }

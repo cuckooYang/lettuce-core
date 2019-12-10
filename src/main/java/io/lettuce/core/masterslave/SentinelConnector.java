@@ -15,13 +15,6 @@
  */
 package io.lettuce.core.masterslave;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
-
-import reactor.core.publisher.Mono;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisException;
 import io.lettuce.core.RedisURI;
@@ -29,6 +22,13 @@ import io.lettuce.core.codec.RedisCodec;
 import io.lettuce.core.models.role.RedisNodeDescription;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+import reactor.core.publisher.Mono;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 
 /**
  * {@link MasterSlaveConnector} to connect a Sentinel-managed Master/Slave setup using a Sentinel {@link RedisURI}.
@@ -43,11 +43,18 @@ class SentinelConnector<K, V> implements MasterSlaveConnector<K, V> {
     private final RedisClient redisClient;
     private final RedisCodec<K, V> codec;
     private final RedisURI redisURI;
+    private String defaultNodes = null;
 
     SentinelConnector(RedisClient redisClient, RedisCodec<K, V> codec, RedisURI redisURI) {
         this.redisClient = redisClient;
         this.codec = codec;
         this.redisURI = redisURI;
+    }
+    SentinelConnector(RedisClient redisClient, RedisCodec<K, V> codec, RedisURI redisURI,String defaultNodes) {
+        this.redisClient = redisClient;
+        this.codec = codec;
+        this.redisURI = redisURI;
+        this.defaultNodes = defaultNodes;
     }
 
     @Override
@@ -62,13 +69,12 @@ class SentinelConnector<K, V> implements MasterSlaveConnector<K, V> {
                 redisURI, Collections.emptyMap());
 
         Runnable runnable = getTopologyRefreshRunnable(refresh, connectionProvider);
-
+        connectionProvider.setDefaultNode(defaultNodes);
         return refresh.getNodes(redisURI).flatMap(nodes -> {
 
             if (nodes.isEmpty()) {
                 return Mono.error(new RedisException(String.format("Cannot determine topology from %s", redisURI)));
             }
-
             return initializeConnection(codec, sentinelTopologyRefresh, connectionProvider, runnable, nodes);
         }).onErrorMap(ExecutionException.class, Throwable::getCause).toFuture();
     }
@@ -98,18 +104,16 @@ class SentinelConnector<K, V> implements MasterSlaveConnector<K, V> {
         }).then(Mono.just(connection));
     }
 
-    private Runnable getTopologyRefreshRunnable(MasterSlaveTopologyRefresh refresh,
+    private Runnable         getTopologyRefreshRunnable(MasterSlaveTopologyRefresh refresh,
             MasterSlaveConnectionProvider<K, V> connectionProvider) {
 
         return () -> {
             try {
-
                 LOG.debug("Refreshing topology");
                 refresh.getNodes(redisURI).subscribe(nodes -> {
                     if (nodes.isEmpty()) {
                         LOG.warn("Topology refresh returned no nodes from {}", redisURI);
                     }
-
                     LOG.debug("New topology: {}", nodes);
                     connectionProvider.setKnownNodes(nodes);
 

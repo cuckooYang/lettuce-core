@@ -15,14 +15,6 @@
  */
 package io.lettuce.core.masterslave;
 
-import static io.lettuce.core.masterslave.MasterSlaveUtils.findNodeByHostAndPort;
-
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.function.Function;
-
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import io.lettuce.core.*;
 import io.lettuce.core.api.StatefulConnection;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -33,6 +25,14 @@ import io.lettuce.core.models.role.RedisInstance;
 import io.lettuce.core.models.role.RedisNodeDescription;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.function.Function;
+
+import static io.lettuce.core.masterslave.MasterSlaveUtils.findNodeByHostAndPort;
 
 /**
  * Connection provider for master/slave setups. The connection provider
@@ -51,13 +51,14 @@ public class MasterSlaveConnectionProvider<K, V> {
     private final AsyncConnectionProvider<ConnectionKey, StatefulRedisConnection<K, V>, CompletionStage<StatefulRedisConnection<K, V>>> connectionProvider;
 
     private List<RedisNodeDescription> knownNodes = new ArrayList<>();
+    private String defaultNodes = new String();
 
     private boolean autoFlushCommands = true;
     private final Object stateLock = new Object();
     private ReadFrom readFrom;
 
     MasterSlaveConnectionProvider(RedisClient redisClient, RedisCodec<K, V> redisCodec, RedisURI initialRedisUri,
-            Map<RedisURI, StatefulRedisConnection<K, V>> initialConnections) {
+                                  Map<RedisURI, StatefulRedisConnection<K, V>> initialConnections) {
 
         this.initialRedisUri = initialRedisUri;
 
@@ -135,13 +136,26 @@ public class MasterSlaveConnectionProvider<K, V> {
             }
 
             try {
-
                 Flux<StatefulRedisConnection<K, V>> connections = Flux.empty();
-
+                int i =0;
                 for (RedisNodeDescription node : selection) {
+                    if(defaultNodes != null){
+                        for(String defaultNode:defaultNodes.split(",")){
+                            String[] split = defaultNode.split(":");
+                            if(node.getUri().getHost().equals(split[0]) && String.valueOf(node.getUri().getPort()).equals(split[1])){
+                                Collections.swap(selection,selection.indexOf(node),i);
+                                i++;
+                            }
+                        }
+                    }
+                }
+//                selection.stream().forEach(node->{
+//                    System.out.println("node host: "+node.getUri().getHost()+ " node port: "+node.getUri().getPort());
+//                });
+                for (RedisNodeDescription node : selection) {
+                    System.out.println("node host: "+node.getUri().getHost()+ " node port: "+node.getUri().getPort());
                     connections = connections.concatWith(Mono.fromFuture(getConnection(node)));
                 }
-
                 if (OrderingReadFromAccessor.isOrderSensitive(readFrom) || selection.size() == 1) {
                     return connections.filter(StatefulConnection::isOpen).next().switchIfEmpty(connections.next()).toFuture();
                 }
@@ -281,6 +295,9 @@ public class MasterSlaveConnectionProvider<K, V> {
 
             closeStaleConnections();
         }
+    }
+    public void setDefaultNode(String defaultNodes){
+        this.defaultNodes =defaultNodes;
     }
 
     /**
